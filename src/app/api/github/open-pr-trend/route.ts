@@ -1,5 +1,8 @@
 import { NextResponse } from "next/server";
 
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 type PullRequest = {
   created_at: string;
   closed_at: string | null;
@@ -55,7 +58,7 @@ const fetchAllPullRequests = async (
         Authorization: `Bearer ${token}`,
         "X-GitHub-Api-Version": "2022-11-28"
       },
-      next: { revalidate: 60 }
+      cache: "no-store"
     });
 
     if (!response.ok) {
