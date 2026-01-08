@@ -1,9 +1,18 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import LineChart from "@/components/LineChart";
 import { people, periods } from "@/mock/data";
+
+type GithubTrendPoint = {
+  label: string;
+  openPr: number;
+};
+
+type GithubTrendResponse = {
+  periods: GithubTrendPoint[];
+};
 
 const insight = {
   what: "Work in progress spiked in Week 4 while open pull requests dipped.",
@@ -11,8 +20,60 @@ const insight = {
   action: "Schedule a mid-sprint review to unblock reviews and clarify delivery targets."
 };
 
+const buildChartData = (trend?: GithubTrendPoint[]) => {
+  if (!trend || trend.length === 0) {
+    return periods;
+  }
+
+  const fallbackJira = periods[periods.length - 1]?.jiraWip ?? 0;
+
+  return trend.map((point, index) => ({
+    label: point.label,
+    jiraWip: periods[index]?.jiraWip ?? fallbackJira,
+    githubOpenPr: point.openPr
+  }));
+};
+
 export default function TeamPage() {
   const [reviewed, setReviewed] = useState(false);
+  const [chartData, setChartData] = useState(periods);
+  const [isLoading, setIsLoading] = useState(true);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const loadTrend = async () => {
+      try {
+        const response = await fetch("/api/github/open-pr-trend");
+        if (!response.ok) {
+          throw new Error("Failed to load GitHub trend data.");
+        }
+        const data = (await response.json()) as GithubTrendResponse;
+        if (isMounted) {
+          setChartData(buildChartData(data.periods));
+          setErrorMessage(null);
+        }
+      } catch (error) {
+        if (isMounted) {
+          setChartData(periods);
+          setErrorMessage(
+            error instanceof Error ? error.message : "Unable to load GitHub trend data."
+          );
+        }
+      } finally {
+        if (isMounted) {
+          setIsLoading(false);
+        }
+      }
+    };
+
+    loadTrend();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   return (
     <div className="flex flex-col gap-8">
@@ -34,7 +95,15 @@ export default function TeamPage() {
         </button>
       </section>
 
-      <LineChart title="Team throughput signals" data={periods} />
+      <div className="space-y-3">
+        <LineChart title="Team throughput signals" data={chartData} />
+        {isLoading ? (
+          <p className="text-xs text-slate-400">Loading GitHub pull request trends…</p>
+        ) : null}
+        {errorMessage ? (
+          <p className="text-xs text-rose-300">{errorMessage}</p>
+        ) : null}
+      </div>
 
       <section className="grid gap-6 lg:grid-cols-[1.2fr_1fr]">
         <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-6">
